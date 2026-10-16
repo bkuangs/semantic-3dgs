@@ -1,0 +1,9 @@
+# M3: robustness - pose refinement, sky cubemap, per-image exposure, LiDAR depth.
+inherit: base.yaml
+output_dir: outputs/waymo/m3_full
+features:
+  dynamic: true
+  pose_refine: true
+  sky: true
+  exposure: true
+  depth_loss: true

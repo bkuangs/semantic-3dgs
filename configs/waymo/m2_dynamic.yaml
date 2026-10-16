@@ -1,0 +1,5 @@
+# M2: scene graph with rigid dynamic vehicles.
+inherit: base.yaml
+output_dir: outputs/waymo/m2_dynamic
+features:
+  dynamic: true

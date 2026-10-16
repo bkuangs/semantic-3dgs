@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "semantic-3dgs"
+version = "0.1.0"
+description = "Scene-graph dynamic & semantic 3D Gaussian Splatting for driving logs (Waymo Open Dataset)"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "numpy>=1.26",
+  "pillow>=10.0",
+  "pyyaml>=6.0",
+  "scipy>=1.11",
+  "tqdm>=4.66",
+  "torch==2.13.0",
+  "imageio[ffmpeg]>=2.35",
+]
+
+[project.optional-dependencies]
+cuda = [
+  "gsplat>=1.5",
+  "nvidia-cuda-cccl==13.0.85; sys_platform == 'linux'",
+  "nvidia-cuda-crt==13.0.88; sys_platform == 'linux'",
+  "nvidia-cuda-nvcc==13.0.88; sys_platform == 'linux'",
+  "nvidia-cuda-runtime==13.0.96; sys_platform == 'linux'",
+  "nvidia-nvvm==13.0.88; sys_platform == 'linux'",
+]
+semantics = ["transformers>=4.57,<5"]
+evaluation = ["lpips>=0.1.4"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+s3dgs = "semantic_3dgs.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/semantic_3dgs"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+markers = ["cuda: requires a CUDA device and gsplat"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

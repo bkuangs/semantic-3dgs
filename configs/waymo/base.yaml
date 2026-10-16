@@ -1,0 +1,15 @@
+# Waymo segment converted by scripts/preprocess_waymo.py. Point scene_dir at it.
+data:
+  scene_dir: data/scenes/waymo/SEGMENT_NAME
+  downscale: 2
+  frame_range: [0, 100]
+  holdout_every: 10
+init:
+  voxel_size: 0.05
+  max_background_points: 1000000
+train:
+  iterations: 30000
+  cap_max: 1500000
+  refine_stop: 15000
+  eval_every: 10000
+  checkpoint_every: 10000

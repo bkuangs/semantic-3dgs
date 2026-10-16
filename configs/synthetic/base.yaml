@@ -1,0 +1,16 @@
+# Procedural debug scene (`s3dgs synth`). Small, fast, with exact GT semantics.
+data:
+  scene_dir: data/scenes/synthetic
+  downscale: 1
+  holdout_every: 8
+init:
+  voxel_size: 0.05
+  max_background_points: 300000
+  min_object_points: 1000
+train:
+  iterations: 7000
+  cap_max: 600000
+  refine_stop: 5000
+  sh_degree_interval: 500
+  eval_every: 7000
+  checkpoint_every: 7000
