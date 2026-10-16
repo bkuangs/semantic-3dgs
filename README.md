@@ -9,6 +9,51 @@ Scene-graph dynamic and semantic 3D Gaussian Splatting for driving logs, targeti
 - **Robustness.** A sky cubemap, per-image exposure correction and LiDAR depth supervision are included.
 - **Demo.** The final deliverable is a counterfactual video: the ego vehicle shifted one lane and an actor cut-in, rendered as RGB | semantics | depth.
 
+![Counterfactual render: logged trajectory vs. ego lane change + actor cut-in](docs/images/counterfactual.gif)
+
+*A reference implementation of every milestone on the bundled synthetic scene. Top: reconstruction of the logged drive. Bottom: the ego camera is shifted 2 m left while the tracked car cuts in. Panels are RGB | semantics | depth, all rendered from the same Gaussians.*
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph Inputs["Driving log (Waymo / synthetic)"]
+        L[LiDAR sweeps]
+        B[3D box tracks]
+        C[Multi-camera images<br/>+ calibration]
+        S[2D semantic labels<br/>pseudo-GT]
+    end
+
+    subgraph Init["Initialization (M1-M2)"]
+        BG["Background points<br/>world frame, movers cropped"]
+        OBJ["Per-object points<br/>canonical box frame"]
+    end
+
+    subgraph Model["Scene graph (M2-M4)"]
+        G["Flat Gaussian buffer<br/>μ, s, q, α, SH, semantic logits, node_id"]
+        P["Node poses T_W←O(t)<br/>+ learnable se(3) correction"]
+        SKY[Sky cubemap]
+        EXP[Per-image exposure]
+    end
+
+    R["gsplat rasterizer<br/>RGB + logits + depth"]
+    LOSS["L1 + D-SSIM + CE<br/>+ LiDAR depth + sky + regs"]
+
+    L --> BG
+    L --> OBJ
+    B --> OBJ
+    B --> BG
+    B --> P
+    BG --> G
+    OBJ --> G
+    G -- "compose at t" --> R
+    P --> R
+    R --> SKY --> EXP --> LOSS
+    C --> LOSS
+    S --> LOSS
+    L -. depth .-> LOSS
+```
+
 > **This is a scaffold.** The infrastructure is complete: data loading, Waymo conversion, gsplat rasterization, densification, training loop, evaluation, visualisation and CLI. The *theory* is stubbed with `todo("Mx", hint)` and raises `NotImplementedError`. The tests in `tests/student/` are the specification. They fail until you implement each milestone.
 
 ## Setup
@@ -32,6 +77,14 @@ python scripts/preprocess_waymo.py SEGMENT.tfrecord data/scenes/waymo/SEGMENT_NA
 
 The on-disk scene format is documented at the top of `src/semantic_3dgs/data/scene.py`.
 
+## The synthetic debug scene
+
+`s3dgs synth` renders a procedural street with exact cameras, LiDAR, boxes and semantic labels. Use it to debug each milestone before moving to Waymo. It has a moving car that cuts in, a parked car (static, so it belongs to the background), a pedestrian (masked out of the loss), and per-camera exposure differences.
+
+![Synthetic scene inputs](docs/images/inputs.png)
+
+The bottom row is the M0 check (`s3dgs check`). Once your camera conventions are right, the LiDAR points land on edges and the box masks cover the actors.
+
 ## Milestones
 
 Run one milestone at a time: `uv run pytest tests/student/test_m1_static.py -x`.
@@ -46,6 +99,12 @@ Run one milestone at a time: `uv run pytest tests/student/test_m1_static.py -x`.
 | **M5** | Counterfactual demo | `offset_pose` | `s3dgs render` produces the hero video |
 
 `grep -rn 'todo("M' src` lists every stub. `test_e2e_synthetic.py` trains each milestone config on a small synthetic scene. A reference implementation reaches about 35 dB PSNR, 33 dB dynamic-region PSNR, 0.011 depth AbsRel and 0.98 mIoU there. The thresholds are set well below that.
+
+What finishing the milestones looks like on a held-out view. M1 can't represent the moving car, so it smears or vanishes. The scene graph makes it sharp, and the same Gaussians also render depth and semantics:
+
+![M1 vs M4 on a held-out view](docs/images/results.png)
+
+After M5, regenerate these figures from your own implementation with `uv run python scripts/make_readme_figures.py`.
 
 ## Workflow
 
