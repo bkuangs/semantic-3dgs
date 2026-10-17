@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import torch
 from torch import Tensor
 
 from semantic_3dgs._stub import todo
@@ -19,15 +20,25 @@ from semantic_3dgs.render.pipeline import RenderOutput
 
 
 def rgb_loss(pred: Tensor, target: Tensor, mask: Tensor, ssim_lambda: float) -> Tensor:
-    """``(1 - lambda) * L1 + lambda * (1 - SSIM)`` over masked pixels.
+    """Photometric loss: how far the rendered image is from the real photo. Two terms:
+        * L1: the per-pixel color error.
+        * 1 - SSIM: a structural similarity term that compares local patches (contrast, edges, texture).
 
     Args: pred, target (H, W, 3) in [0, 1]; mask (H, W) bool.
 
-    Masked-out pixels must receive *no* gradient - including through SSIM's window, which mixes
-    neighbouring pixels (hint: what if masked pixels of ``pred`` simply equalled the target?).
-    Hint: :func:`semantic_3dgs.eval.metrics.ssim_map` returns a per-pixel SSIM map.
+    Computed only over pixels where mask is True; masked-out pixels get no gradient.
     """
-    todo("M1")
+    if not mask.any():
+        return pred.sum() * 0.0  # zero, but still part of the graph
+
+    pred = torch.where(mask[..., None], pred, target)   # (H, W, 3)
+
+    l1 = (pred - target).abs()[mask].mean()              # mean over valid pixels and channels
+    if ssim_lambda == 0:
+        return l1
+
+    ssim = ssim_map(pred, target)[mask].mean()           # ssim_map -> (H, W)
+    return (1 - ssim_lambda) * l1 + ssim_lambda * (1 - ssim)
 
 
 def semantic_loss(logits: Tensor, labels: Tensor, mask: Tensor) -> Tensor:
@@ -53,12 +64,12 @@ def sky_loss(alpha: Tensor, sky_mask: Tensor) -> Tensor:
 
 def opacity_regularization(opacities: Tensor) -> Tensor:
     """Mean L1 of activated opacities (N,) - keeps the Gaussian count honest under MCMC."""
-    todo("M1")
+    return opacities.abs().mean()
 
 
 def scale_regularization(scales: Tensor) -> Tensor:
     """Mean L1 of activated scales (N, 3) - discourages huge needles / blobs."""
-    todo("M1")
+    return scales.abs().mean()
 
 
 @dataclass

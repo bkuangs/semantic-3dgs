@@ -15,20 +15,29 @@ Notation: ``T_a_b`` maps coordinates expressed in frame ``b`` into frame ``a``:
 
 from __future__ import annotations
 
+import torch
 from torch import Tensor
 
 from semantic_3dgs._stub import todo
+from semantic_3dgs.geometry.transforms import invert_se3
 
 
 def waymo_camera_from_opencv(dtype=None, device=None) -> Tensor:
-    """Return ``T_cw_cv`` (4, 4): the rigid transform taking OpenCV-camera coordinates into
-    Waymo-camera coordinates. Pure rotation, zero translation, determinant +1.
-    """
-    todo("M0", "write down where each OpenCV axis points in the Waymo camera frame")
+    """Build rotation matrix for OpenCV-camera -> Waymo-camera coordinates."""
+    return torch.tensor(
+        [
+            [0.0, 0.0, 1.0, 0.0],
+            [-1.0, 0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0]
+        ],
+        dtype=dtype if dtype is not None else torch.float32,
+        device=device,
+    )
 
 
 def world_to_camera_viewmat(T_world_vehicle: Tensor, T_vehicle_camera: Tensor) -> Tensor:
-    """OpenCV world-to-camera view matrix ``T_cv_W`` for gsplat.
+    """Build the OpenCV world-to-camera view matrix for gsplat; only the extrinsic part of M [R | t].
 
     Args:
         T_world_vehicle: (..., 4, 4) ego pose at the image capture time.
@@ -37,4 +46,7 @@ def world_to_camera_viewmat(T_world_vehicle: Tensor, T_vehicle_camera: Tensor) -
     Returns:
         (..., 4, 4) matrix mapping world points into the OpenCV camera frame.
     """
-    todo("M0", "compose the chain W <- V <- C_w <- C_cv, then invert it")
+    T_W_Ccv = T_world_vehicle @ T_vehicle_camera @ waymo_camera_from_opencv(
+        dtype=T_world_vehicle.dtype, device=T_world_vehicle.device)
+    
+    return invert_se3(T_W_Ccv)

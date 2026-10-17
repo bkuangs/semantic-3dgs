@@ -7,6 +7,7 @@ from torch import Tensor
 
 from semantic_3dgs._stub import todo
 from semantic_3dgs.data.scene import DrivingScene
+from semantic_3dgs.geometry import box_to_pose, points_in_box, transform_points
 
 
 def classify_dynamic_tracks(
@@ -21,14 +22,32 @@ def classify_dynamic_tracks(
     Useful API: ``scene.tracks``, ``track.boxes[frame].center / .heading``,
     ``scene.T_world_vehicle(frame)``.
     """
-    todo("M1")
+    dynamic = []
+
+    for tid, t in scene.tracks.items():
+        if t.category not in categories:
+            continue
+
+        centers, poses = [], []
+        for frame, box in t.boxes.items():
+            T_wv = scene.T_world_vehicle(frame)     # ego -> world conversion to measure motion
+            centers.append(torch.as_tensor(box.center, dtype=T_wv.dtype))
+            poses.append(T_wv)
+
+        # batched: row i is transformed by poses[i]
+        centers_w = transform_points(torch.stack(poses), torch.stack(centers))  # (F, 3)
+
+        if torch.cdist(centers_w, centers_w).max() > displacement_threshold:
+            dynamic.append(tid)
+
+    return sorted(dynamic)
 
 
 def accumulate_static_points(
     scene: DrivingScene, excluded_track_ids: list[str], box_margin: float
 ) -> Tensor:
-    """Concatenate every LiDAR sweep in the world frame after removing points that fall inside
-    the (margin-inflated) boxes of ``excluded_track_ids`` at that frame.
+    """For every LiDAR sweep: drop the points that hit moving objects, 
+    move the rest into the world frame, and concatenate everything into one cloud.
 
     Returns:
         (M, 3) float32 world-frame points (not yet downsampled).
@@ -36,7 +55,23 @@ def accumulate_static_points(
     Useful API: ``scene.lidar(frame)`` (vehicle frame), ``scene.T_world_vehicle(frame)``,
     :func:`~semantic_3dgs.geometry.boxes.points_in_box`.
     """
-    todo("M1")
+    chunks = []
+    for frame in range(scene.num_frames):
+        pts = scene.lidar(frame)
+        keep = torch.ones(len(pts), dtype=torch.bool)       # mask
+
+        for tid in excluded_track_ids:                      # only get static tracks (objects)
+            box = scene.tracks[tid].boxes.get(frame)
+            if not Box: continue
+
+            T_vb = box_to_pose(torch.as_tensor(box.center, dtype=torch.float32),    # box -> ego frame
+                               torch.tensor(box.heading, dtype=torch.float32))
+            size = torch.as_tensor(box.size, dtype=torch.float32)
+            keep &= ~points_in_box(pts, T_vehicle_box, size, margin=box_margin)     # remove points inside moving tracks
+            
+        chunks.append(transform_points(scene.T_world_vehicle(frame), pts[keep]))
+
+    return torch.cat(chunks).float()
 
 
 def voxel_downsample(points: Tensor, voxel_size: float) -> Tensor:
