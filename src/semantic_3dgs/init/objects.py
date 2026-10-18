@@ -7,7 +7,7 @@ from torch import Tensor
 
 from semantic_3dgs._stub import todo
 from semantic_3dgs.data.scene import DrivingScene
-from semantic_3dgs.geometry import box_to_pose, points_in_box, transform_points
+from semantic_3dgs.geometry import box_to_pose, invert_se3, points_in_box, transform_points
 
 
 def accumulate_object_points(scene: DrivingScene, track_id: str, box_margin: float) -> Tensor:

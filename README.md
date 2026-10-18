@@ -77,6 +77,19 @@ python scripts/preprocess_waymo.py SEGMENT.tfrecord data/scenes/waymo/SEGMENT_NA
 
 The on-disk scene format is documented at the top of `src/semantic_3dgs/data/scene.py`.
 
+### Argoverse 2 (alternative to Waymo)
+
+[Argoverse 2 Sensor](https://www.argoverse.org/av2.html) logs are on a public S3 bucket (no account needed). `scripts/preprocess_av2.py` downloads just the files a window of frames needs and converts them to the same scene format. It needs no TensorFlow, only `pyarrow` and OpenCV:
+
+```bash
+uv run --with pyarrow --with opencv-python-headless python scripts/preprocess_av2.py \
+    LOG_ID --split val --download --max-frames 60 --out data/scenes/av2
+uv run s3dgs check data/scenes/av2/LOG_ID
+uv run s3dgs train configs/waymo/m1_static.yaml --set data.scene_dir=data/scenes/av2/LOG_ID
+```
+
+One frame is one LiDAR sweep (10 Hz). The ring cameras are renamed to the Waymo-style names the configs use (`FRONT`, `FRONT_LEFT`, `FRONT_RIGHT`, `SIDE_*`, `REAR_*`), camera extrinsics are converted to Waymo camera axes, and cuboid categories are mapped to `VEHICLE` / `PEDESTRIAN` / `CYCLIST` / `SIGN` / `OTHER`. AV2 has no 2D semantic labels, so M4 uses pseudo-labels from `s3dgs segment`. A full log with three cameras is about 500 MB.
+
 ## The synthetic debug scene
 
 `s3dgs synth` renders a procedural street with exact cameras, LiDAR, boxes and semantic labels. Use it to debug each milestone before moving to Waymo. It has a moving car that cuts in, a parked car (static, so it belongs to the background), a pedestrian (masked out of the loss), and per-camera exposure differences.
