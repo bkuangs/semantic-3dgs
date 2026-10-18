@@ -12,6 +12,7 @@ from semantic_3dgs.data.scene import DrivingScene
 from semantic_3dgs.geometry import box_to_pose
 from semantic_3dgs.model.gaussians import GaussianBuffer
 from semantic_3dgs.model.pose_refine import PoseRefinement
+from semantic_3dgs.geometry.lie import quat_multiply, rotmat_to_quat
 
 
 @dataclass
@@ -23,11 +24,14 @@ class ComposedGaussians:
 
 
 def gather_per_gaussian(table: Tensor, node_ids: Tensor) -> Tensor:
-    """``table[node_ids]`` for a small per-node table (K+1, ...) -> (N, ...).
+    """Copy node pose and visibilty for the current frame to each Gaussian, so that they know
+    the node transform.
 
-    Plain indexing is correct, but when ``table`` requires grad (pose refinement) its backward
-    scatter-adds ~10^6 rows into K+1 slots with atomics, which is ~30x slower than the whole
-    rasterizer. A one-hot matmul turns the backward into a dense GEMM instead.
+    Example: Nodes = [background, car_A] and node_ids = [0, 0, 1, 1, 1]:
+    * Gaussians 0 and 1 get the identity pose, so they stay where they are, in world coordinates.
+    * Gaussians 2, 3, and 4 get car_A's pose for this frame, so they move with the car.
+
+    The copy is cheap, and it's rebuilt every frame because the car poses change from frame to frame.
     """
     if not table.requires_grad:
         return table[node_ids.long()]
@@ -42,7 +46,11 @@ def compose_gaussians(
     node_poses: Tensor,
     node_visible: Tensor,
 ) -> ComposedGaussians:
-    """Place every Gaussian in the world frame at one timestamp.
+    """Place every Gaussian in the world frame at one timestamp. In the scene graph,
+    each Gaussian is in its own coordinate frame.
+
+    The rasterizer only takes one flat list of Gaussians in world coordinates, so we
+    must transform every Gaussian.
 
     Args:
         means: (N, 3) node-local positions.
@@ -59,13 +67,35 @@ def compose_gaussians(
     Use :func:`gather_per_gaussian` (not ``node_poses[node_ids]``) to expand per-node quantities,
     otherwise pose refinement (M3) makes every training step ~10x slower.
     """
-    todo("M2", "gather per-Gaussian transforms with node_ids, then rotate/translate")
+    visible = gather_per_gaussian(node_visible, node_ids)
+    poses = gather_per_gaussian(node_poses, node_ids)
+    
+    R, p = poses[:, :3, :3], poses[:, :3, 3]
+
+    means = (R @ means.unsqueeze(-1)).squeeze(-1) + p       # move to world frame
+
+    node_q = rotmat_to_quat(node_poses[:, :3, :3])
+    q_g = gather_per_gaussian(node_q, node_ids)
+    quats = quat_multiply(q_g, quats)                       # rotate Gaussian with its node
+
+    return ComposedGaussians(means, quats, R, visible)
 
 
 def build_node_tables(
     scene: DrivingScene, node_track_ids: list[str | None]
 ) -> tuple[Tensor, Tensor]:
-    """``T_W_node`` for every node and frame, plus a visibility table.
+    """A node table is a precomputed lookup table indexed by [node, frame]. At render
+    time, we can just look up where every node is in every frame.
+
+    For example, a backgrunod and 2 cars over 4 frames:
+
+                    frame 0     frame 1     frame 2     frame 3
+        node 0 bg   I  ✓        I  ✓        I  ✓        I  ✓      ← identity, always visible
+        node 1 car  T₀ ✓        T₁ ✓        T₂ ✓        T₂ ✗      ← left after frame 2
+        node 2 car  T₁' ✗       T₁' ✓       T₂' ✓       T₃' ✓     ← entered at frame 1
+
+    Each car take its box in that frame and compute T_world_vehicle(frame) @ box_to_pose(center, heading)
+        * Chains box → vehicle → world
 
     Frames where a track is unlabelled reuse the nearest labelled pose and are marked invisible.
 
@@ -93,6 +123,16 @@ def build_node_tables(
 
 
 class SceneGraph(nn.Module):
+    """
+    Node: One piece of the scene that moves as a unit, has its own coordinate frame and pose.
+        * Node 0:        Static background (road, buildings, trees, etc.)
+        * Nodes 1 ... K: Moving objects, eg. driving car
+
+    Every Gaussian belongs to exactly 1 node, node_ids[i] index.
+
+    Appearance (Gaussians) are stored separately from motion (pose), so we learn the car
+    once and then move it anywhere.
+    """
     def __init__(
         self,
         gaussians: GaussianBuffer,

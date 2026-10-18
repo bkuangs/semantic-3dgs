@@ -15,7 +15,7 @@ from semantic_3dgs.geometry.transforms import invert_se3, transform_points
 
 
 def box_to_pose(center: Tensor, heading: Tensor) -> Tensor:
-    """Pose ``T_parent_O`` of box frames.
+    """Transform a bounding box's local coords to ego frame at this timestep.
 
     Args:
         center: (..., 3) box centres in the parent frame.

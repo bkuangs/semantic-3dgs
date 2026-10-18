@@ -60,14 +60,14 @@ def accumulate_static_points(
         pts = scene.lidar(frame)
         keep = torch.ones(len(pts), dtype=torch.bool)       # mask
 
-        for tid in excluded_track_ids:                      # only get static tracks (objects)
+        for tid in excluded_track_ids:                      # exclude dynamic tracks
             box = scene.tracks[tid].boxes.get(frame)
-            if not Box: continue
+            if box is None: continue
 
             T_vb = box_to_pose(torch.as_tensor(box.center, dtype=torch.float32),    # box -> ego frame
                                torch.tensor(box.heading, dtype=torch.float32))
             size = torch.as_tensor(box.size, dtype=torch.float32)
-            keep &= ~points_in_box(pts, T_vehicle_box, size, margin=box_margin)     # remove points inside moving tracks
+            keep &= ~points_in_box(pts, T_vb, size, margin=box_margin)     # remove points inside moving tracks
             
         chunks.append(transform_points(scene.T_world_vehicle(frame), pts[keep]))
 

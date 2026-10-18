@@ -23,21 +23,30 @@ def rgb_loss(pred: Tensor, target: Tensor, mask: Tensor, ssim_lambda: float) -> 
     """Photometric loss: how far the rendered image is from the real photo. Two terms:
         * L1: the per-pixel color error.
         * 1 - SSIM: a structural similarity term that compares local patches (contrast, edges, texture).
+            * SSIM = Structural Similarity Index Measure
+
+    The overall loss function combines them.
 
     Args: pred, target (H, W, 3) in [0, 1]; mask (H, W) bool.
 
     Computed only over pixels where mask is True; masked-out pixels get no gradient.
+
+    Masking rule: a track is masked if it moves but doesn't get its own node, eg. pedestrians
+                  that we can't model.
     """
     if not mask.any():
         return pred.sum() * 0.0  # zero, but still part of the graph
 
-    pred = torch.where(mask[..., None], pred, target)   # (H, W, 3)
+    # SSIM looks at a window, so the gradient would leak through 
+    # Replace masked-out pixels with the target, so no gradient can flow back and it doesn't pull loss
+    pred = torch.where(mask[..., None], pred, target)
 
     l1 = (pred - target).abs()[mask].mean()              # mean over valid pixels and channels
     if ssim_lambda == 0:
         return l1
 
     ssim = ssim_map(pred, target)[mask].mean()           # ssim_map -> (H, W)
+
     return (1 - ssim_lambda) * l1 + ssim_lambda * (1 - ssim)
 
 

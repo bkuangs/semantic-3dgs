@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from torch import Tensor
+import torch.nn.functional as F
 
 from semantic_3dgs._stub import todo
 
@@ -10,7 +11,11 @@ from semantic_3dgs._stub import todo
 def object_frame_view_dirs(
     means_world: Tensor, camera_center_world: Tensor, rotations: Tensor
 ) -> Tensor:
-    """Unit viewing directions expressed in each Gaussian's *node-local* frame.
+    """Each Gaussian's color depends on the direction you look at it from, via spherical-harmonics (SH) 
+    coefficients. We evaluate them with a viewing direction to get RGB color.
+
+    For moving objects, the SH coefficients are learned in the car's own frame. Thus, we must express
+    the viewing direction in the car's frame before evaluating SH.
 
     SH coefficients of an object are learned in its canonical frame, so they must be evaluated
     with the direction "camera -> Gaussian" rotated into that frame. Otherwise a highlight on a
@@ -25,7 +30,9 @@ def object_frame_view_dirs(
         (N, 3) unit vectors. For the background (identity rotation) this equals the standard
         3DGS direction ``normalize(mu - c)``.
     """
-    todo("M2")
+    d_W = F.normalize(means_world - camera_center_world, dim=-1)     # world direction from camera to Gaussian
+
+    return (rotations.transpose(-1, -2) @ d_W.unsqueeze(-1)).squeeze(-1)  # rotate into node frame
 
 
 def evaluate_sh(sh_coeffs: Tensor, dirs: Tensor, degree: int) -> Tensor:
