@@ -88,7 +88,7 @@ uv run s3dgs check data/scenes/av2/LOG_ID
 uv run s3dgs train configs/waymo/m1_static.yaml --set data.scene_dir=data/scenes/av2/LOG_ID
 ```
 
-One frame is one LiDAR sweep (10 Hz). The ring cameras are renamed to the Waymo-style names the configs use (`FRONT`, `FRONT_LEFT`, `FRONT_RIGHT`, `SIDE_*`, `REAR_*`), camera extrinsics are converted to Waymo camera axes, and cuboid categories are mapped to `VEHICLE` / `PEDESTRIAN` / `CYCLIST` / `SIGN` / `OTHER`. AV2 has no 2D semantic labels, so M4 uses pseudo-labels from `s3dgs segment`. A full log with three cameras is about 500 MB.
+One frame is one LiDAR sweep (10 Hz). The ring cameras are renamed to the Waymo-style names the configs use (`FRONT`, `FRONT_LEFT`, `FRONT_RIGHT`, `SIDE_*`, `REAR_*`), camera extrinsics are converted to FLU camera axes, and cuboid categories are mapped to `VEHICLE` / `PEDESTRIAN` / `CYCLIST` / `SIGN` / `OTHER`. AV2 has no 2D semantic labels, so M4 uses pseudo-labels from `s3dgs segment`. A full log with three cameras is about 500 MB.
 
 ## The synthetic debug scene
 
@@ -137,7 +137,7 @@ Use `--set section.key=value` to override any config field, e.g. `--set train.it
 
 - `T_a_b` maps points in frame *b* to frame *a*. Quaternions are `wxyz`.
 - World = vehicle frame at frame 0, so coordinates stay small enough for float32.
-- Waymo camera axes are x forward, y left, z up; gsplat expects OpenCV axes (x right, y down, z forward).
+- Camera extrinsics (`T_vehicle_camera`) use FLU axes (x forward, y left, z up, same as Waymo's camera frame and the vehicle frame); gsplat expects OpenCV axes (x right, y down, z forward). `flu_camera_from_opencv` converts between them.
 - Boxes are stored in each frame's vehicle frame with `size = (length, width, height)`; `heading` is yaw.
 - Pose refinement right-multiplies: `T = T_box @ exp(δ)`. Node 0 (background) is never refined.
 

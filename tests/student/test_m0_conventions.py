@@ -6,19 +6,19 @@ import torch
 from conftest import HEIGHT, WIDTH, ref_pose, ref_rz
 
 from semantic_3dgs.geometry import (
+    flu_camera_from_opencv,
     invert_se3,
     project_points,
     transform_points,
-    waymo_camera_from_opencv,
     world_to_camera_viewmat,
 )
 
 
-def test_waymo_camera_from_opencv_axes():
-    T = waymo_camera_from_opencv()
+def test_flu_camera_from_opencv_axes():
+    T = flu_camera_from_opencv()
     assert T.shape == (4, 4)
     R = T[:3, :3]
-    # OpenCV optical axis (+z) is Waymo camera +x; OpenCV right (+x) is Waymo -y; down is -z.
+    # OpenCV optical axis (+z) is FLU camera +x; OpenCV right (+x) is FLU -y; down is -z.
     torch.testing.assert_close(R @ torch.tensor([0.0, 0, 1]), torch.tensor([1.0, 0, 0]))
     torch.testing.assert_close(R @ torch.tensor([1.0, 0, 0]), torch.tensor([0.0, -1, 0]))
     torch.testing.assert_close(R @ torch.tensor([0.0, 1, 0]), torch.tensor([0.0, 0, -1]))

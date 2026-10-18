@@ -11,7 +11,7 @@ files it needs for a window of frames, then convert them:
 What it does (see ``src/semantic_3dgs/data/scene.py`` for the output schema):
   * one frame per LiDAR sweep (10 Hz); each camera contributes its image closest in time (20 Hz);
   * re-centres the city frame at the first ego pose (float32 precision);
-  * converts AV2's OpenCV-axis camera extrinsics to Waymo camera axes (x fwd, y left, z up);
+  * converts AV2's OpenCV-axis camera extrinsics to FLU camera axes (x fwd, y left, z up);
   * undistorts images with the radial (k1, k2, k3) model and writes a valid-pixel mask (which also
     excludes the ego hood visible at the bottom of the front camera);
   * stores each image's own ego pose at its capture time;
@@ -58,8 +58,9 @@ CATEGORY_MAP = {
 }
 CATEGORY_OF = {av2: ours for ours, names in CATEGORY_MAP.items() for av2 in names}
 
-# OpenCV camera axes (x right, y down, z forward) -> Waymo camera axes (x forward, y left, z up).
-T_WAYMO_CAM_FROM_OPENCV = np.array(
+# OpenCV camera axes (x right, y down, z forward) -> FLU camera axes (x forward, y left, z up).
+# Same matrix as semantic_3dgs.geometry.flu_camera_from_opencv (kept here to avoid importing torch).
+T_FLU_CAM_FROM_OPENCV = np.array(
     [[0.0, 0.0, 1.0, 0.0], [-1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
 )
 
@@ -244,7 +245,7 @@ def convert(log_dir: Path, out_root: Path, cameras: list[str], start: int, max_f
         T_vehicle_cam_cv = _se3(extrinsics, j)
         meta["cameras"][cam] = {
             "K": K.tolist(), "width": width, "height": height,
-            "T_vehicle_camera": (T_vehicle_cam_cv @ np.linalg.inv(T_WAYMO_CAM_FROM_OPENCV)).tolist(),
+            "T_vehicle_camera": (T_vehicle_cam_cv @ np.linalg.inv(T_FLU_CAM_FROM_OPENCV)).tolist(),
             "distortion": dist.tolist(),
             "av2_name": av2_name,
         }

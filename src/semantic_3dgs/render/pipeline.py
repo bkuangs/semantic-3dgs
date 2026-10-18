@@ -21,7 +21,7 @@ class View:
     width: int
     height: int
     T_world_vehicle: Tensor  # (4, 4) ego pose
-    T_vehicle_camera: Tensor  # (4, 4) Waymo-axes extrinsic
+    T_vehicle_camera: Tensor  # (4, 4) extrinsic, FLU camera axes
     frame: int  # which frame's object poses to use
     image_index: int | None = None  # training image index (for exposure); None = novel view
 

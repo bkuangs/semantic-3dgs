@@ -34,7 +34,7 @@ def accumulate_object_points(scene: DrivingScene, track_id: str, box_margin: flo
         size = torch.as_tensor(box.size, dtype=torch.float32)
         inside = points_in_box(pts, T_vo, size, margin=box_margin)
         
-    chunks.append(transform_points(invert_se3(T_vo), pts[inside]))
+        chunks.append(transform_points(invert_se3(T_vo), pts[inside]))
     if not chunks: return torch.zeros(0, 3)
 
     return torch.cat(chunks).float()

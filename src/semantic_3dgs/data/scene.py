@@ -49,7 +49,7 @@ class CameraCalib:
     K: np.ndarray  # (3, 3), already scaled by the configured downscale
     width: int
     height: int
-    T_vehicle_camera: np.ndarray  # (4, 4), Waymo camera axes
+    T_vehicle_camera: np.ndarray  # (4, 4), FLU camera axes (x forward, y left, z up)
 
 
 @dataclass(frozen=True)
