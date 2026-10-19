@@ -49,3 +49,8 @@ class PoseRefinement(nn.Module):
         Penalize sharp corrections so they stay small and steady.
         """
         d = self.deltas[1:]
+        diff = d[:, 1:] - d[:, :-1]
+        if diff.numel() == 0:
+            return self.deltas.sum() * 0.0
+
+        return diff.pow(2).mean()

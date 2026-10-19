@@ -5,8 +5,6 @@ from __future__ import annotations
 import torch
 from torch import Tensor, nn
 
-from semantic_3dgs._stub import todo
-
 
 class ExposureCorrection(nn.Module):
     """Problem: Each camera runs auto-exposure and auto-white-balance, so the same
@@ -24,6 +22,7 @@ class ExposureCorrection(nn.Module):
     def __init__(self, num_images: int):
         super().__init__()
         identity = torch.eye(3, 4)
+        self.register_buffer("identity", identity, persistent=False)
         self.affine = nn.Parameter(identity.repeat(num_images, 1, 1))   # [A | b], starting at A=I, b=0
 
     def forward(self, rgb: Tensor, image_index: int) -> Tensor:
@@ -38,6 +37,6 @@ class ExposureCorrection(nn.Module):
         """Keep each correction close to the identity, so it only explains real differences 
         between images.
         """
-        diff = self.affine - identity
+        diff = self.affine - self.identity
 
         return diff.pow(2).mean()

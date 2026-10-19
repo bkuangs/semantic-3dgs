@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from torch import Tensor
 import torch.nn.functional as F
-
-from semantic_3dgs._stub import todo
+from torch import Tensor
 
 
 def object_frame_view_dirs(

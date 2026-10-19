@@ -7,12 +7,11 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, nn
 
-from semantic_3dgs._stub import todo
 from semantic_3dgs.data.scene import DrivingScene
 from semantic_3dgs.geometry import box_to_pose
+from semantic_3dgs.geometry.lie import quat_multiply, rotmat_to_quat
 from semantic_3dgs.model.gaussians import GaussianBuffer
 from semantic_3dgs.model.pose_refine import PoseRefinement
-from semantic_3dgs.geometry.lie import quat_multiply, rotmat_to_quat
 
 
 @dataclass

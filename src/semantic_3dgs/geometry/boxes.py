@@ -10,7 +10,6 @@ from __future__ import annotations
 import torch
 from torch import Tensor
 
-from semantic_3dgs._stub import todo
 from semantic_3dgs.geometry.transforms import invert_se3, transform_points
 
 

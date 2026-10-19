@@ -8,9 +8,8 @@ and a loss on the semantic sky mask pushes ``alpha -> 0`` there.
 from __future__ import annotations
 
 import torch
-from torch import Tensor, nn
-
 import torch.nn.functional as F
+from torch import Tensor, nn
 
 FACE_ORDER = ("+x", "-x", "+y", "-y", "+z", "-z")
 
@@ -45,12 +44,13 @@ class SkyCubemap(nn.Module):
 
         # Pick the face depending on which axis the direction points along the most
         axis = d.abs().argmax(dim=-1)
-        major = d.gather(-1, axis[: None]).squeeze(-1)
+        major = d.gather(-1, axis[:, None]).squeeze(-1)
         face = 2 * axis + (major < 0).long()
 
-        others = torch.tensor([[1, 2], [0, 2], [0, 1]])[axis]
+        others = torch.tensor([[1, 2], [0, 2], [0, 1]], device=d.device)[axis]
         uv = d.gather(-1, others) / major.abs().clamp_min(1e-8)[:, None]    # perspective divide
 
+        out = torch.zeros(len(d), 3, dtype=self.faces.dtype, device=d.device)
         # Loop through all faces because different pixels in one frame have different directions
         for f in range(6):
             m = face == f
@@ -59,7 +59,7 @@ class SkyCubemap(nn.Module):
 
             img = self.faces[f].permute(2, 0, 1)[None]  # (6, R, R, 3)->(R, R, 3)->(3, R, R)->(1, 3, R, R)
             grid = uv[m][None, None]
-            s = F.grid_sample(img, frid, mode="bilinear", padding_mode="border", align_corners=False)
+            s = F.grid_sample(img, grid, mode="bilinear", padding_mode="border", align_corners=False)
             out[m] = s[0, :, 0].T                       # remove extra dim and put color last again
 
         return torch.sigmoid(out).reshape(*shape, 3)
