@@ -9,23 +9,35 @@ from semantic_3dgs._stub import todo
 
 
 class ExposureCorrection(nn.Module):
-    """``affine[i]`` is a (3, 4) matrix ``[A | b]`` applied as ``rgb' = A @ rgb + b`` to the
-    rendered image of training image ``i`` before the photometric loss. Initialised to identity.
+    """Problem: Each camera runs auto-exposure and auto-white-balance, so the same
+    object can come out brighter/warmer/darker between images/cameras. Gaussians have 
+    one color per viewing direction, so if two photos disagree, the model comprimises.
 
-    The absolute colour scale is unobservable (a global gain can move into the Gaussians), so
-    :meth:`regularization` should keep corrections near identity. Novel views are rendered
-    without correction.
+    Solution: Give each training image its own small color transform, applied to the
+    rendered image before it's compared to the photo.
+
+    Example: A = diag(2, 2, 2) and b = (0.1, 0.1, 0.1)
+
+        pixel (0.2, 0.3, 0.4) → (2·0.2 + 0.1, 2·0.3 + 0.1, 2·0.4 + 0.1) = (0.5, 0.7, 0.9)
     """
 
     def __init__(self, num_images: int):
         super().__init__()
         identity = torch.eye(3, 4)
-        self.affine = nn.Parameter(identity.repeat(num_images, 1, 1))
+        self.affine = nn.Parameter(identity.repeat(num_images, 1, 1))   # [A | b], starting at A=I, b=0
 
     def forward(self, rgb: Tensor, image_index: int) -> Tensor:
         """Args: rgb (H, W, 3). Returns corrected (H, W, 3)."""
-        todo("M3")
+        M = self.affine[image_index]
+        A = M[:, :3]
+        b = M[:, 3]
+
+        return rgb @ A.T + b
 
     def regularization(self) -> Tensor:
-        """Scalar, zero at initialisation, growing with the distance from identity."""
-        todo("M3")
+        """Keep each correction close to the identity, so it only explains real differences 
+        between images.
+        """
+        diff = self.affine - identity
+
+        return diff.pow(2).mean()

@@ -60,15 +60,31 @@ def semantic_loss(logits: Tensor, labels: Tensor, mask: Tensor) -> Tensor:
 
 
 def depth_loss(pred_depth: Tensor, lidar_depth: Tensor, mask: Tensor) -> Tensor:
-    """L1 between rendered expected depth (H, W) and sparse LiDAR depth (H, W, 0 = no return),
-    over pixels that have a return and are in ``mask``."""
-    todo("M3")
+    """RGB loss only checks colors. Multiple 3D arrangements can produce the same image,
+    especially on textureless surfaces. So a model can get colors right but geometry wrong.
+
+    Solution: Use LiDAR to measure true distance for some pixels. The loss is the L1 error
+    between rendered depth and LiDAR depth.
+    """
+    valid = mask & (lidar_depth > 0)
+    if not valid.any():                 # no lidar hits shouldn't return NaN
+        return pred_depth.sum() * 0.0
+
+    return (pred_depth - lidar_depth).abs()[valid].mean()
 
 
 def sky_loss(alpha: Tensor, sky_mask: Tensor) -> Tensor:
-    """Push accumulated opacity (H, W) towards 0 on sky pixels (H, W bool). Zero when
-    ``alpha == 0`` on the sky, increasing in alpha, and independent of non-sky pixels."""
-    todo("M3", "e.g. binary cross-entropy against 0 on sky pixels")
+    """Without guidance, the optimizer paints the sky with Gaussians giving garbage depth.
+
+    Solution: On pixels segmented as sky, pushed rendered opacity to 0, which shows the sky
+    cubemap instead.
+    """
+    if not sky_mask.any():
+        return alpha.sum() * 0.0        # no sky pixels shouldn't return NaN
+
+    a = alpha[sky_mask].clamp(max=1 - 1e-6)
+
+    return -torch.log1p(-a).mean()
 
 
 def opacity_regularization(opacities: Tensor) -> Tensor:

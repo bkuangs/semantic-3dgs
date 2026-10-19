@@ -83,12 +83,15 @@ def pixel_ray_directions(K: Tensor, T_world_cv: Tensor, height: int, width: int)
         (height, width, 3) unit vectors. Pixel (row v, col u) uses image point (u + 0.5, v + 0.5).
     """
     dtype, device = K.dtype, K.device
+    
     v, u = torch.meshgrid(
         torch.arange(height, dtype=dtype, device=device) + 0.5,
         torch.arange(width, dtype=dtype, device=device) + 0.5,
         indexing="ij",
     )
+
     pixels = torch.stack([u, v, torch.ones_like(u)], dim=-1)     # (H, W, 3) homogeneous pixels
     dirs_cam = pixels @ torch.linalg.inv(K).T                     # K^-1 @ [u, v, 1] per pixel
     dirs_world = dirs_cam @ T_world_cv[:3, :3].to(dtype).T        # rotate only: directions ignore t
+
     return F.normalize(dirs_world, dim=-1)
