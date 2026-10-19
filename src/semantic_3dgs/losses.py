@@ -10,11 +10,12 @@ from dataclasses import dataclass
 
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 
 from semantic_3dgs._stub import todo
 from semantic_3dgs.classes import IGNORE_INDEX, SKY
 from semantic_3dgs.config import ExperimentConfig
-from semantic_3dgs.eval.metrics import ssim_map  # noqa: F401  (provided for rgb_loss)
+from semantic_3dgs.eval.metrics import ssim_map
 from semantic_3dgs.model.scene_model import SceneModel
 from semantic_3dgs.render.pipeline import RenderOutput
 
@@ -56,7 +57,11 @@ def semantic_loss(logits: Tensor, labels: Tensor, mask: Tensor) -> Tensor:
     Pixels with ``labels == IGNORE_INDEX`` or ``mask == False`` are excluded. Returns 0 (with a
     graph) if nothing is valid.
     """
-    todo("M4")
+    valid = mask & (labels != IGNORE_INDEX)
+    if not valid.any():
+        return logits.sum() * 0.0                  # zero, still connected to the graph
+
+    return F.cross_entropy(logits[valid], labels[valid])
 
 
 def depth_loss(pred_depth: Tensor, lidar_depth: Tensor, mask: Tensor) -> Tensor:
