@@ -6,8 +6,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from semantic_3dgs._stub import todo
-
 
 def invert_se3(T: Tensor) -> Tensor:
     """
@@ -66,7 +64,15 @@ def project_points(points_cam: Tensor, K: Tensor) -> tuple[Tensor, Tensor]:
 
 
 def pixel_ray_directions(K: Tensor, T_world_cv: Tensor, height: int, width: int) -> Tensor:
-    """Unit ray directions in the world frame through every pixel centre.
+    """For every pixel, compute the world-space direction the camera is looking through that
+    pixel. These are used to color the sky.
+
+    This is needed since the sky is infinitely far away, so the color only depends on direction
+    rather than where the camera is. Gaussians handle this poorly; use a sky cubemap instead, which
+    computes a learned color for every direction.
+
+    Wherever the Gaussians don't fully cover a pixel (alpha < 1), the sky color for that pixel's 
+    direction shows through.
 
     Args:
         K: (3, 3) intrinsics.
@@ -76,4 +82,13 @@ def pixel_ray_directions(K: Tensor, T_world_cv: Tensor, height: int, width: int)
     Returns:
         (height, width, 3) unit vectors. Pixel (row v, col u) uses image point (u + 0.5, v + 0.5).
     """
-    todo("M3", "needed by the sky model")
+    dtype, device = K.dtype, K.device
+    v, u = torch.meshgrid(
+        torch.arange(height, dtype=dtype, device=device) + 0.5,
+        torch.arange(width, dtype=dtype, device=device) + 0.5,
+        indexing="ij",
+    )
+    pixels = torch.stack([u, v, torch.ones_like(u)], dim=-1)     # (H, W, 3) homogeneous pixels
+    dirs_cam = pixels @ torch.linalg.inv(K).T                     # K^-1 @ [u, v, 1] per pixel
+    dirs_world = dirs_cam @ T_world_cv[:3, :3].to(dtype).T        # rotate only: directions ignore t
+    return F.normalize(dirs_world, dim=-1)

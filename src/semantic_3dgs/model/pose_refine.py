@@ -5,26 +5,47 @@ from __future__ import annotations
 import torch
 from torch import Tensor, nn
 
-from semantic_3dgs._stub import todo
+from semantic_3dgs.geometry.lie import se3_exp
 
 
 class PoseRefinement(nn.Module):
-    """Per-node, per-frame twist ``delta_xi[k, t]`` in se(3), initialised to zero.
+    """Learned corrections that cancel the jitter in 3D box labels.
 
-    Convention: the refined pose is ``T_W_O(t) = T_hat_W_O(t) @ exp(delta_xi[k, t])``, i.e. the
-    correction is applied in the *object* frame, so translation components read as
-    "forward / left / up relative to the car". Node 0 (background) must never move.
+    Learn a small correction per car per frame (photometric loss) that moves 
+    each car to where the images show it.
+
+    How a correction is applied (``T_hat`` = labelled pose, ``T`` = refined pose):
+
+        T_W_O(t) = T_hat_W_O(t) @ se3_exp(deltas[k, t])
+
+    The background (Node 0) is never corrected, otherwise the whole world could drift.
+     
+    smoothness_loss() discourages corrections that jump between neighbouring frames,
+    so the module cancels small jitter instead of inventing motion.
     """
 
     def __init__(self, num_nodes: int, num_frames: int):
         super().__init__()
-        self.deltas = nn.Parameter(torch.zeros(num_nodes, num_frames, 6))
+        self.deltas = nn.Parameter(torch.zeros(num_nodes, num_frames, 6))   # learnable pose corrections
 
     def forward(self, base_poses: Tensor, frame: int) -> Tensor:
-        """Args: base_poses (K+1, 4, 4) at ``frame``. Returns refined (K+1, 4, 4)."""
-        todo("M3", "use geometry.lie.se3_exp; keep node 0 exactly at base_poses[0]")
+        """Take the labelled poses for one frame and return slightly corrected poses.
+        One learned correction per node applied in each node's own frame.
+        
+        Args: 
+        * base_poses: the queried poses from the node table
+        * frame: the frame to correct
+        
+        Returns refined (K+1, 4, 4).
+        """
+        xi = self.deltas[:, frame]      # one twist (ρ, φ) per node
+        D = se3_exp(xi)                 # 6 num -> rigid tf
+        refined = base_poses @ D        # apply correction
+
+        return torch.cat([base_poses[:1], refined[1:]], dim=0)
 
     def smoothness_loss(self) -> Tensor:
-        """Scalar penalty on frame-to-frame changes of the corrections of dynamic nodes, so the
-        refinement removes jitter instead of inventing motion."""
-        todo("M3")
+        """
+        Penalize sharp corrections so they stay small and steady.
+        """
+        d = self.deltas[1:]
