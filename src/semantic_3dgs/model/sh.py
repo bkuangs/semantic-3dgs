@@ -12,14 +12,13 @@ def object_frame_view_dirs(
     means_world: Tensor, camera_center_world: Tensor, rotations: Tensor
 ) -> Tensor:
     """Each Gaussian's color depends on the direction you look at it from, via spherical-harmonics (SH) 
-    coefficients. We evaluate them with a viewing direction to get RGB color.
+    coefficients. We query Gaussians with a viewing direction to get RGB color.
 
     For moving objects, the SH coefficients are learned in the car's own frame. Thus, we must express
     the viewing direction in the car's frame before evaluating SH.
 
-    SH coefficients of an object are learned in its canonical frame, so they must be evaluated
-    with the direction "camera -> Gaussian" rotated into that frame. Otherwise a highlight on a
-    car stays fixed in world space while the car drives past it.
+    This function simply computes an object's local frame for each Gaussian, depending on the camera's
+    viewing direction.
 
     Args:
         means_world: (N, 3) world positions.
@@ -30,8 +29,9 @@ def object_frame_view_dirs(
         (N, 3) unit vectors. For the background (identity rotation) this equals the standard
         3DGS direction ``normalize(mu - c)``.
     """
-    d_W = F.normalize(means_world - camera_center_world, dim=-1)     # world direction from camera to Gaussian
+    d_W = F.normalize(means_world - camera_center_world, dim=-1)    # world direction from camera to Gaussian
 
+    # Now "from car's right" always means the car's own right side
     return (rotations.transpose(-1, -2) @ d_W.unsqueeze(-1)).squeeze(-1)  # rotate into node frame
 
 

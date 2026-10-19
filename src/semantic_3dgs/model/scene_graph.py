@@ -24,10 +24,10 @@ class ComposedGaussians:
 
 
 def gather_per_gaussian(table: Tensor, node_ids: Tensor) -> Tensor:
-    """Copy node pose and visibilty for the current frame to each Gaussian, so that they know
-    the node transform.
+    """Copy each node's data to every Gaussian belonging to that node, so that any transform
+    applied to the node is applied to the Gaussians as well (in a batched operation).
 
-    Example: Nodes = [background, car_A] and node_ids = [0, 0, 1, 1, 1]:
+    Example: nodes = [background, car_A], node_ids = [0, 0, 1, 1, 1]:
     * Gaussians 0 and 1 get the identity pose, so they stay where they are, in world coordinates.
     * Gaussians 2, 3, and 4 get car_A's pose for this frame, so they move with the car.
 
@@ -46,11 +46,11 @@ def compose_gaussians(
     node_poses: Tensor,
     node_visible: Tensor,
 ) -> ComposedGaussians:
-    """Place every Gaussian in the world frame at one timestamp. In the scene graph,
-    each Gaussian is in its own coordinate frame.
+    """Assemble the entire scene at one frame: Move every Gaussian from its node local frame
+    into the world frame, so the rasterizer can draw them all together.
 
-    The rasterizer only takes one flat list of Gaussians in world coordinates, so we
-    must transform every Gaussian.
+    The rasterizer (gsplat) only accepts one flat list of Gaussians in world coordinates, so we
+    must transform each car's Gaussians into the world frame.
 
     Args:
         means: (N, 3) node-local positions.
@@ -67,10 +67,11 @@ def compose_gaussians(
     Use :func:`gather_per_gaussian` (not ``node_poses[node_ids]``) to expand per-node quantities,
     otherwise pose refinement (M3) makes every training step ~10x slower.
     """
+    # Get the Gaussians of each node
     visible = gather_per_gaussian(node_visible, node_ids)
     poses = gather_per_gaussian(node_poses, node_ids)
     
-    R, p = poses[:, :3, :3], poses[:, :3, 3]
+    R, p = poses[:, :3, :3], poses[:, :3, 3]                # split pose
 
     means = (R @ means.unsqueeze(-1)).squeeze(-1) + p       # move to world frame
 
@@ -84,20 +85,28 @@ def compose_gaussians(
 def build_node_tables(
     scene: DrivingScene, node_track_ids: list[str | None]
 ) -> tuple[Tensor, Tensor]:
-    """A node table is a precomputed lookup table indexed by [node, frame]. At render
-    time, we can just look up where every node is in every frame.
+    """Precompute where every node is in the world at every frame, plus whether it 
+    exists in that frame. Runs once, before training, and produces two lookup tables:
+    * poses:   Where node k is in the world at frame t
+    * visible: Whether node k is labelled at frame t
 
-    For example, a backgrunod and 2 cars over 4 frames:
+    For example, a background and 2 cars over 4 frames:
 
                     frame 0     frame 1     frame 2     frame 3
         node 0 bg   I  ✓        I  ✓        I  ✓        I  ✓      ← identity, always visible
         node 1 car  T₀ ✓        T₁ ✓        T₂ ✓        T₂ ✗      ← left after frame 2
         node 2 car  T₁' ✗       T₁' ✓       T₂' ✓       T₃' ✓     ← entered at frame 1
 
-    Each car take its box in that frame and compute T_world_vehicle(frame) @ box_to_pose(center, heading)
-        * Chains box → vehicle → world
+    Steps:
+    1. Look up the car's box at frame t
+    2. Transform box -> vehicle -> world
+    3. Mark visible if the car has a box at frame t
+        a. This is a dataset lookup (dataset labelled this object at this sweep)
 
     Frames where a track is unlabelled reuse the nearest labelled pose and are marked invisible.
+    This allows every entry holds a valid pose, so the tensor has no holes.
+
+    Consumption: Tells the renderer where to draw each object and whether to draw it at each frame.
 
     Returns:
         poses: (K+1, F, 4, 4), visible: (K+1, F) bool.
@@ -105,11 +114,14 @@ def build_node_tables(
     num_nodes, num_frames = len(node_track_ids), scene.num_frames
     poses = torch.eye(4).repeat(num_nodes, num_frames, 1, 1)
     visible = torch.ones(num_nodes, num_frames, dtype=torch.bool)
+
     for node, track_id in enumerate(node_track_ids):
         if track_id is None:
             continue
+
         boxes = scene.tracks[track_id].boxes
         labelled = sorted(boxes)
+
         for frame in range(num_frames):
             nearest = min(labelled, key=lambda f, fr=frame: abs(f - fr))
             box = boxes[nearest]
@@ -119,6 +131,7 @@ def build_node_tables(
             )
             poses[node, frame] = scene.T_world_vehicle(nearest) @ T_vehicle_box
             visible[node, frame] = frame in boxes
+
     return poses, visible
 
 
