@@ -67,6 +67,9 @@ class TrainConfig:
     device: str = "cuda"
     strategy: str = "mcmc"  # "mcmc" | "default"
     cap_max: int = 1_500_000
+    # MCMC position noise is lr_means * extent * noise_lr * covariance (m^2), so it grows with
+    # extent^2 in unnormalised metric scenes; lower it for long drives (e.g. 210 at 78 m extent).
+    noise_lr: float = 5e5
     densify_grad_threshold: float = 0.0005
     refine_start: int = 500
     refine_stop: int = 15_000

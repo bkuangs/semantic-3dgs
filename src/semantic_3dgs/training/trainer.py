@@ -42,6 +42,7 @@ def make_strategy(cfg: ExperimentConfig):
     if t.strategy == "mcmc":
         return MCMCStrategy(
             cap_max=t.cap_max,
+            noise_lr=t.noise_lr,
             refine_start_iter=t.refine_start,
             refine_stop_iter=t.refine_stop,
             refine_every=t.refine_every,

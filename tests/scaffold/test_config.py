@@ -36,3 +36,14 @@ def test_inherit(tmp_path):
 def test_unknown_keys_are_rejected():
     with pytest.raises(ValueError, match="iteratons"):
         config_from_dict({"train": {"iteratons": 3}})
+
+
+def test_noise_lr_reaches_mcmc_strategy(tmp_path):
+    from semantic_3dgs.training.trainer import make_strategy
+
+    path = tmp_path / "c.yaml"
+    path.write_text("train:\n  strategy: mcmc\n")
+    assert make_strategy(load_config(path)).noise_lr == 5e5
+    cfg = load_config(path, ["train.noise_lr=210"])
+    assert cfg.train.noise_lr == 210.0 and isinstance(cfg.train.noise_lr, float)
+    assert make_strategy(cfg).noise_lr == 210.0
