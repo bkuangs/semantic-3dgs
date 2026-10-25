@@ -6,34 +6,39 @@ First, build a 3D Gaussian Splatting model of driving logs. Given camera images,
 
 ![Argoverse 2: held-out camera vs. Gaussian render, depth and semantics](docs/images/av2_hero.png)
 
-*Argoverse 2 log in Pittsburgh. The frame on the left was **never shown during training**. The other three panels are rendered from the learned 3D scene: colour, distance from the camera, and a class label for every pixel.*
-
-## Flow
+### Key Pillars
 
 | | |
 |---|---|
-| 🛰️ **Starts from LiDAR** | The 3D points come straight from the LiDAR scans. No COLMAP or structure-from-motion step is needed. |
-| 🏙️ **Static world** | Roads, buildings and parked cars are one set of Gaussians that never moves. |
-| 🚗 **Moving cars** | Each moving vehicle gets its own small cloud of Gaussians that follows its 3D box track. A learnable correction fixes jittery boxes. |
-| 🏷️ **Semantics** | Each Gaussian also learns a class (road, car, sky, …). The labels come from a 2D segmentation network and become consistent across views. |
-| 🌤️ **Real-world fixes** | A sky backdrop, per-camera exposure correction and LiDAR depth supervision handle the messy parts of real data. |
-| 🎬 **"What if?" videos** | Once trained, you can move the ego car into another lane or make another car cut in, and render the result. |
+| **LiDAR** | The 3D points come straight from the LiDAR scans. No COLMAP or structure-from-motion step is needed. |
+| **Static background** | Roads, buildings and parked cars are one set of Gaussians that never moves. |
+| **Moving cars** | Each moving vehicle gets its own small cloud of Gaussians that follows its 3D box track. A learnable correction fixes jittery boxes. |
+| **Semantics** | Each Gaussian also learns a class (road, car, sky, …). The labels come from a 2D segmentation network and become consistent across views. |
+| **Real-world fixes** | A sky backdrop, per-camera exposure correction and LiDAR depth supervision handle the messy parts of real data. |
+| **"What if?" videos** | Once trained, you can move the ego car into another lane or make another car cut in, and render the result. |
 
-### One drive, start to finish
+### Flow:
 
-Every held-out frame along the Argoverse 2 log. Columns: real camera | render | depth | semantics.
+1. LiDAR points are split into the static background vs. point cloud per moving object, using 3D boxes.
+2. Each point becomes a Gaussian (position, size, rotation, opacity, colour, class scores).
+3. For a given timestamp, every object's Gaussians are moved into the world by its box pose, then all Gaussians are rasterized together with [gsplat](https://github.com/nerfstudio-project/gsplat).
+4. The renders are compared with the real images, LiDAR depth and 2D labels, and everything is optimized by gradient descent.
+
+## Results
+
+Every held-out frame along the Argoverse 2 log.
 
 ![Argoverse 2 drive: held-out front-camera frames](docs/images/av2_drive.gif)
 
 ### All five cameras
 
-Top row: real images. Bottom row: what the model renders for the same held-out moment. All five ring cameras are modelled together.
+Top row: real images. Bottom row: what the model renders for the same held-out moment.
 
 ![Argoverse 2: five ring cameras, real vs. rendered](docs/images/av2_cameras.png)
 
-### Results on Argoverse 2
+### Argoverse 2
 
-Log `070bbf42…`: 156 frames (about 15.6 s, roughly 78 m of road), 5 cameras. Every 10th frame is held out for testing. That makes 80 test images, or 48 for the 3-camera run. Scores below are on the held-out images only.
+156 frames (about 15.6 s of footage, roughly 78 m of road), 5 cameras. Every 10th frame is held out for testing. That makes 80 test images, or 48 for the 3-camera run. Scores below are on the held-out images only.
 
 | Run | Gaussians | PSNR ↑ | PSNR on cars ↑ | Depth error (AbsRel) ↓ | Semantic mIoU ↑ |
 |---|---|---|---|---|---|
@@ -42,34 +47,15 @@ Log `070bbf42…`: 156 frames (about 15.6 s, roughly 78 m of road), 5 cameras. E
 | 6 M budget, `noise_lr=210` | 6.0 M | 20.51 | **19.51** | 0.029 | 0.664 |
 | Front 3 cameras only | 1.7 M | **21.65** | **19.77** | **0.027** | **0.694** |
 
-PSNR measures image similarity in dB; higher is better. "PSNR on cars" is the same score restricted to the moving vehicles. AbsRel is the average relative depth error against LiDAR, so 0.03 means about 3 %. mIoU measures how well the rendered labels match the 2D segmentation.
-
-Held-out renders are slightly off in colour. This is expected: the per-image exposure correction is only learned for training images. Regenerate these figures from any run with:
-
-```bash
-uv run python scripts/make_av2_figures.py ~/scratch/s3dgs/outputs/av2_full/D_budget6M_n210
-```
-
-## How it works
-
-In short:
-
-1. LiDAR points are split into the **static background** and a **canonical point cloud per moving object**, using the 3D boxes.
-2. Each point becomes a Gaussian (position, size, rotation, opacity, colour, class scores).
-3. For a given timestamp, every object's Gaussians are moved into the world by its box pose, then all Gaussians are rasterized together with [gsplat](https://github.com/nerfstudio-project/gsplat).
-4. The renders are compared with the real images, LiDAR depth and 2D labels, and everything is optimized by gradient descent.
-
 ## Synthetic Scenes
 
-We use `s3dgs synth` to render a procedural street where every camera, LiDAR point, box and label is exact for debugging purposes. This is especially interesting for rendering "counterfactual" scenes, :
+We use `s3dgs synth` to render a procedural street where every camera, LiDAR point, box and label is exact for debugging purposes. This is especially interesting for rendering "counterfactual" scenes, a novel scene that never appeared in the log, to see how our reconstruction performs:
 
 ![Counterfactual render: logged trajectory vs. ego lane change + actor cut-in](docs/images/counterfactual.gif)
 
-*The counterfactual demo on the synthetic scene. Top: reconstruction of the logged drive. Bottom: the ego camera is shifted 2 m left while the tracked car cuts in. Panels are RGB | semantics | depth, all rendered from the same Gaussians.*
+*Top: reconstruction of the logged drive. Bottom: shift the camera 2 m left while the tracked car cuts in.*
 
 ## Milestones
-
-Work through these in order, one at a time: `uv run pytest tests/student/test_m1_static.py -x`.
 
 | | Goal | Stubs to implement | You're done when… |
 |---|---|---|---|
@@ -83,6 +69,5 @@ Work through these in order, one at a time: `uv run pytest tests/student/test_m1
 ## Stretch Goals (TODO)
 
 - Rolling-shutter compensation (gsplat `RollingShutterType`; per-image shutter timing is already exported).
-- Evaluate against Waymo's GT panoptic labels instead of pseudo-labels.
 - Non-rigid pedestrians with a small deformation field per actor.
 - Comparison to Street Gaussians / OmniRe on the same segments.
